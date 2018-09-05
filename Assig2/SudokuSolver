@@ -1,0 +1,407 @@
+.data
+	newLine:	.asciiz "\n"
+	loadAddress:	.word 0xFFFF8000
+
+.text
+	lui $s0, 0xffff
+	ori $s0, $s0, 0x8000
+	addi $s1, $zero, 9
+	add $s2, $zero, $zero
+	add $s3, $zero, $zero	
+printDataLoop:
+	beq $s2, $s1, nextLine
+	lb $a0, 0($s0)
+	addi $v0, $zero, 1
+	syscall
+	addi $s2, $s2, 1
+	addi $s0, $s0, 1	
+	j printDataLoop
+	
+nextLine:
+	addi $s3, $s3, 1
+	beq $s3, $s1, _clearA
+	addi $v0, $zero, 4
+	la $a0, newLine
+	syscall
+	addi $s1, $zero, 9
+	add $s2, $zero, $zero
+	j printDataLoop
+	
+_clearA:
+	add $a0, $zero, $zero
+	add $a1, $zero, $zero
+	jal _solveSudoku
+	j exit
+#main
+_solveSudoku:
+	addi $sp, $sp, -20
+	sw $ra, 0($sp)
+	sw $s0, 4($sp)
+	sw $s1, 8($sp)
+	sw $s2, 12($sp)
+	sw $s3, 16($sp)
+		
+	add $s1, $zero, $a0
+	add $s2, $zero, $a1	
+
+	beq $s1, 8, checkifColIs9		#if(r == 8 & c == 9)
+	j colIs9
+	
+checkifColIs9:
+	beq $s2, 9, row8col9
+	j colIs9
+	
+row8col9:
+	addi $v0, $zero, 1
+	lw $s3, 16($sp)
+	lw $s2, 12($sp)
+	lw $s1, 8($sp)
+	lw $s0, 4($sp)
+	lw $ra, 0($sp)
+	addi $sp, $sp, 20
+	jr $ra
+
+colIs9:						#if (c==9)
+	beq $s2, 9, nextRow
+	j checkIftaken
+	
+nextRow:
+	addi $s1, $s1, 1 
+	add $s2, $zero, $zero
+		
+checkIftaken:					#if (data at row r column c is not 0)
+	add $a0, $zero, $s1
+	add $a1, $zero, $s2
+	jal _getData
+	
+	beq $v0, 0, open			
+	
+	add $a0, $zero, $s1			#solveSudoku(r, c + 1)
+	addi $a1, $s2, 1
+		
+	jal _solveSudoku
+	
+	add $v0, $zero, $v0
+	lw $s3, 16($sp)
+	lw $s2, 12($sp)
+	lw $s1, 8($sp)
+	lw $s0, 4($sp)
+	lw $ra, 0($sp)
+	addi $sp, $sp, 20
+	jr $ra
+	
+open:
+	addi $s3, $zero, 1
+	
+solvePuzzle:
+	beq $s3, 10, end
+	add $a0, $zero, $s1
+	add $a1, $zero, $s2
+	add $a2, $zero, $s3
+	jal _checkIfConflict
+
+	beq $v0, 1, increment						
+						#put in cell
+	add $a0, $zero, $s1
+	add $a1, $zero, $s2
+	add $a2, $zero, $s3
+	jal tryNum
+						
+	add $a0, $zero, $s1			#solveSudoku(r, c + 1)
+	addi $a1, $s2, 1
+	jal _solveSudoku			
+	
+	add $s0, $zero, $v0
+	beq $s0, 0, increment			#if(p) - return true
+	
+	addi $v0, $zero, 1
+	
+	lw $s3, 16($sp)
+	lw $s2, 12($sp)
+	lw $s1, 8($sp)
+	lw $s0, 4($sp)
+	lw $ra, 0($sp)
+	addi $sp, $sp, 20
+	jr $ra
+	
+increment:
+	addi $s3, $s3, 1			#next number
+	j solvePuzzle
+end:	
+	add $a0, $zero, $s1
+	add $a1, $zero, $s2
+	add $a2, $zero, $zero
+	jal tryNum
+	
+	add $v0, $zero, $zero			#return false
+	
+	lw $s3, 16($sp)
+	lw $s2, 12($sp)
+	lw $s1, 8($sp)
+	lw $s0, 4($sp)
+	lw $ra, 0($sp)
+	addi $sp, $sp, 20
+	jr $ra
+
+tryNum:
+	addi $sp, $sp, -36
+	sw $ra, 0($sp)
+	sw $s0, 4($sp)
+	sw $s1, 8($sp)
+	sw $s2, 12($sp)
+	
+	lw $s0, loadAddress
+	add $s0, $s0, $a1
+	addi $s1, $zero, 9
+	
+	mult $a0, $s1
+	mflo $s2
+	add $s0, $s0, $s2
+	sb $a2, ($s0)
+	lb $v0, ($s0)
+
+	lw $s2, 12($sp)
+	lw $s1, 8($sp)
+	lw $s0, 4($sp)
+	lw $ra, 0($sp)
+	addi $sp, $sp, 36
+	jr $ra
+
+_checkIfConflict:
+	addi $sp, $sp, -36
+	sw $ra, 0($sp)
+	sw $s0, 4($sp)
+	sw $s1, 8($sp)
+	sw $s2, 12($sp)
+	sw $s3, 16($sp)
+	sw $s5, 24($sp)
+	sw $s6, 28($sp)
+	sw $s7, 32($sp)
+	
+	add $s5, $zero, $a0
+	add $s6, $zero, $a1
+	add $s7, $zero, $a2
+	
+	add $a0, $zero, $s5
+	add $a1, $zero, $s7
+	jal _checkRow
+	add $s0, $zero, $v0
+	add $a0, $zero, $s6
+	add $a1, $zero, $s7
+	jal _checkColumn
+	add $s1, $zero, $v0
+	add $a0, $zero, $s5
+	add $a1, $zero, $s6
+	add $a2, $zero, $s7
+	jal _checkSubgrid
+	add $s2, $zero, $v0
+	
+	or $s3, $s0, $s1
+	or $v0, $s3, $s2
+	
+	lw $s7, 32($sp)
+	lw $s6, 28($sp)
+	lw $s5, 24($sp)
+	lw $s3, 16($sp)
+	lw $s2, 12($sp)
+	lw $s1, 8($sp)
+	lw $s0, 4($sp)
+	lw $ra, 0($sp)
+	addi $sp, $sp, 36
+	jr $ra	
+
+_getData:	
+	addi $sp, $sp, -36
+	sw $ra, 0($sp)
+	sw $s0, 4($sp)
+	sw $s1, 8($sp)
+	sw $s2, 12($sp)
+	
+	lw $s0, loadAddress
+	add $s0, $s0, $a1
+	addi $s1, $zero, 9
+	mult $a0, $s1
+	mflo $s2
+	add $s0, $s0, $s2
+
+	lb $v0, ($s0)
+	
+	lw $s2, 12($sp)
+	lw $s1, 8($sp)
+	lw $s0, 4($sp)
+	lw $ra, 0($sp)
+	addi $sp, $sp, 36
+	jr $ra
+#rowCheck
+_checkRow:
+	addi $sp, $sp, -36
+	sw $ra, 0($sp)
+	sw $s0, 4($sp)
+	sw $s1, 8($sp)
+	sw $s2, 12($sp)
+	sw $s3, 16($sp)
+
+	lw $s0, loadAddress
+	addi $s1, $zero, 9
+	
+	mult $a0, $s1
+	mflo $s3
+	add $s0, $s0, $s3
+	
+nextNumRow:
+	beq $s1, 0, notInRow
+	lb $s3, ($s0)
+	beq $s3, $a1, alreadyThere
+	addi $s0, $s0, 1
+	subi $s1, $s1, 1
+	j nextNumRow
+	
+notInRow:
+	add $v0, $zero, $zero
+	j rowDone
+alreadyThere:
+	addi $v0, $zero, 1
+	j rowDone
+rowDone:	
+	lw $s3, 16($sp)
+	lw $s2, 12($sp)
+	lw $s1, 8($sp)
+	lw $s0, 4($sp)
+	lw $ra, 0($sp)
+	addi $sp, $sp, 36
+	jr $ra
+
+#column check
+_checkColumn:
+	addi $sp, $sp, -36
+	sw $ra, 0($sp)
+	sw $s0, 4($sp)
+	sw $s1, 8($sp)
+	sw $s2, 12($sp)
+	
+	lw $s0, loadAddress
+	add $s0, $s0, $a0
+	add $s1, $zero, $zero
+	
+nextNumCol:
+	beq $s1, 9, notInCol
+	lb $s2, ($s0)
+	beq $s2, $a1, alreadyInCol
+	addi $s1, $s1, 1
+	addi $s0, $s0, 9
+	j nextNumCol
+	
+notInCol:
+	add $v0, $zero, $zero
+	j colDone
+alreadyInCol:
+	addi $v0, $zero, 1
+	j colDone
+colDone:	
+	lw $s2, 12($sp)
+	lw $s1, 8($sp)
+	lw $s0, 4($sp)
+	lw $ra, 0($sp)
+	addi $sp, $sp, 36
+	jr $ra
+
+#check subgrid
+_checkSubgrid:
+	addi $sp, $sp, -36
+	sw $ra, 0($sp)
+	sw $s0, 4($sp)
+	sw $s1, 8($sp)
+	sw $s2, 12($sp)
+	sw $s3, 16($sp)
+	sw $s4, 20($sp)
+	sw $s5, 24($sp)
+	sw $s6, 28($sp)
+	sw $s7, 32($sp)
+	
+	addi $s1, $zero, 3
+	lw $s0, loadAddress
+
+	div $a0, $s1			#load subgrid
+	mflo $s2			#row of subgrid
+	mult $s2, $s1
+	mflo $s2
+	div $a1, $s1
+	mflo $s3			#column of subgrid
+	add $s2, $s2, $s3
+					
+	beq $s2, 0, sub0		#depending on what subgrid were in add accordingly to
+	beq $s2, 1, sub1		#get next number to check
+	beq $s2, 2, sub2
+	beq $s2, 3, sub3
+	beq $s2, 4, sub4
+	beq $s2, 5, sub5
+	beq $s2, 6, sub6
+	beq $s2, 7, sub7
+	beq $s2, 8, sub8
+sub0:
+	j checkSub
+sub1:
+	addi $s0, $s0, 3
+	j checkSub
+sub2:
+	addi $s0, $s0, 6
+	j checkSub
+sub3:
+	addi $s0, $s0, 27
+	j checkSub
+sub4:
+	addi $s0, $s0, 30
+	j checkSub
+sub5:
+	addi $s0, $s0, 33
+	j checkSub
+sub6:
+	addi $s0, $s0, 54
+	j checkSub
+sub7:
+	addi $s0, $s0, 57
+	j checkSub
+sub8:	
+	addi $s0, $s0, 60
+	j checkSub
+checkSub:
+	add $s5, $zero, $zero
+	add $s6, $zero, $zero
+subGridLoop:
+	beq $s5, 3, nextCol
+	lb $s4, ($s0)
+	beq $s4, $a2, alreadyInSubGrid
+	addi $s5, $s5, 1
+	addi $s0, $s0, 1
+	j subGridLoop
+nextCol:
+	addi $s6, $s6, 1
+	beq $s6, 3, notInSubGrid
+	addi $s0, $s0, 6
+	add $s5, $zero, 0
+	j subGridLoop
+
+notInSubGrid:
+	add $v0, $zero, $zero
+	j doneSubGrid
+	
+alreadyInSubGrid:
+	addi $v0, $zero, 1
+	j doneSubGrid
+	
+doneSubGrid:
+	lw $s7, 32($sp)
+	lw $s6, 28($sp)
+	lw $s5, 24($sp)
+	lw $s4, 20($sp)
+	lw $s3, 16($sp)
+	lw $s2, 12($sp)
+	lw $s1, 8($sp)
+	lw $s0, 4($sp)
+	lw $ra, 0($sp)
+	addi $sp, $sp, 36
+	jr $ra
+
+exit:
+	addi $v0, $zero, 10
+	syscall
